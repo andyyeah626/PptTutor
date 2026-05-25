@@ -83,10 +83,30 @@ async def extract_from_url(request: Request):
     if not url:
         raise HTTPException(400, "Missing url")
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        data = resp.content
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.content
+    except httpx.HTTPStatusError as e:
+        snippet = e.response.text[:200] if e.response is not None else ""
+        return {
+            "success": False,
+            "total_pages": 0,
+            "pages": [],
+            "warnings": [f"download failed: HTTP {e.response.status_code}; {snippet}"],
+            "raw_char_count": 0,
+            "split_method": "python-pptx",
+        }
+    except httpx.HTTPError as e:
+        return {
+            "success": False,
+            "total_pages": 0,
+            "pages": [],
+            "warnings": [f"download failed: {str(e)}"],
+            "raw_char_count": 0,
+            "split_method": "python-pptx",
+        }
 
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "File too large")
