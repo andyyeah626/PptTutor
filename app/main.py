@@ -84,6 +84,19 @@ async def extract_from_url(request: Request):
         if not url:
             raise HTTPException(400, "Missing url")
 
+        # Coze variable interpolation may include leading/trailing whitespace/newlines.
+        if isinstance(url, str):
+            url = url.strip().strip("\"'")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            return {
+                "success": False,
+                "total_pages": 0,
+                "pages": [],
+                "warnings": [f"invalid url: {repr(url)[:200]}"],
+                "raw_char_count": 0,
+                "split_method": "python-pptx",
+            }
+
         try:
             async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
                 resp = await client.get(url)
