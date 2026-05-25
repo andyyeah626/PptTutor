@@ -60,59 +60,62 @@ async def extract_from_url(request: Request):
     """
     import httpx
 
-    # 1) Prefer query string to avoid workflow body-template issues.
-    url = request.query_params.get("url")
-
-    # 2) Fallback to JSON body.
-    if not url:
-        try:
-            body = await request.json()
-            if isinstance(body, dict):
-                url = body.get("url")
-        except Exception:
-            pass
-
-    # 3) Fallback to form body.
-    if not url:
-        try:
-            form = await request.form()
-            url = form.get("url")
-        except Exception:
-            pass
-
-    if not url:
-        raise HTTPException(400, "Missing url")
-
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.content
-    except httpx.HTTPStatusError as e:
-        snippet = e.response.text[:200] if e.response is not None else ""
-        return {
-            "success": False,
-            "total_pages": 0,
-            "pages": [],
-            "warnings": [f"download failed: HTTP {e.response.status_code}; {snippet}"],
-            "raw_char_count": 0,
-            "split_method": "python-pptx",
-        }
-    except httpx.HTTPError as e:
-        return {
-            "success": False,
-            "total_pages": 0,
-            "pages": [],
-            "warnings": [f"download failed: {str(e)}"],
-            "raw_char_count": 0,
-            "split_method": "python-pptx",
-        }
+        # 1) Prefer query string to avoid workflow body-template issues.
+        url = request.query_params.get("url")
 
-    if len(data) > MAX_BYTES:
-        raise HTTPException(413, "File too large")
+        # 2) Fallback to JSON body.
+        if not url:
+            try:
+                body = await request.json()
+                if isinstance(body, dict):
+                    url = body.get("url")
+            except Exception:
+                pass
 
-    try:
+        # 3) Fallback to form body.
+        if not url:
+            try:
+                form = await request.form()
+                url = form.get("url")
+            except Exception:
+                pass
+
+        if not url:
+            raise HTTPException(400, "Missing url")
+
+        try:
+            async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                data = resp.content
+        except httpx.HTTPStatusError as e:
+            status_code = e.response.status_code if e.response is not None else "unknown"
+            snippet = e.response.text[:200] if e.response is not None else ""
+            return {
+                "success": False,
+                "total_pages": 0,
+                "pages": [],
+                "warnings": [f"download failed: HTTP {status_code}; {snippet}"],
+                "raw_char_count": 0,
+                "split_method": "python-pptx",
+            }
+        except httpx.HTTPError as e:
+            return {
+                "success": False,
+                "total_pages": 0,
+                "pages": [],
+                "warnings": [f"download failed: {str(e)}"],
+                "raw_char_count": 0,
+                "split_method": "python-pptx",
+            }
+
+        if len(data) > MAX_BYTES:
+            raise HTTPException(413, "File too large")
+
         return extract_pptx_bytes(data)
+    except HTTPException:
+        raise
     except Exception as e:
         return {
             "success": False,
