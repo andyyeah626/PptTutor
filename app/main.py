@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.extractor import extract_pptx_bytes
@@ -50,14 +50,36 @@ async def extract(file: UploadFile = File(...)):
 
 
 @app.post("/extract/url")
-async def extract_from_url(body: dict):
+async def extract_from_url(request: Request):
     """
     Optional: Coze passes a temporary file URL from start.file.
-    Body: {"url": "https://..."}
+    Supported inputs:
+    - query: /extract/url?url=https://...
+    - json body: {"url": "https://..."}
+    - form body: url=https://...
     """
     import httpx
 
-    url = body.get("url")
+    # 1) Prefer query string to avoid workflow body-template issues.
+    url = request.query_params.get("url")
+
+    # 2) Fallback to JSON body.
+    if not url:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                url = body.get("url")
+        except Exception:
+            pass
+
+    # 3) Fallback to form body.
+    if not url:
+        try:
+            form = await request.form()
+            url = form.get("url")
+        except Exception:
+            pass
+
     if not url:
         raise HTTPException(400, "Missing url")
 
