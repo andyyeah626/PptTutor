@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -87,6 +88,14 @@ async def extract_from_url(request: Request):
         # Coze variable interpolation may include leading/trailing whitespace/newlines.
         if isinstance(url, str):
             url = url.strip().strip("\"'")
+            # Some workflow nodes pass a JSON object as string, e.g. {"file_url":"https://..."}.
+            if url.startswith("{") and url.endswith("}"):
+                try:
+                    payload = json.loads(url)
+                    if isinstance(payload, dict):
+                        url = payload.get("url") or payload.get("file_url") or payload.get("download_url") or ""
+                except Exception:
+                    pass
         if not isinstance(url, str) or not url.startswith(("http://", "https://")):
             return {
                 "success": False,
